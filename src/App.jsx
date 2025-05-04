@@ -7,9 +7,27 @@ function App() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // The three defaults to fetch every time
+  const defaultRegistrations = ["DF04BEY", "D1PLO", "MK63XAR"];
+
   useEffect(() => {
+    // Load anything already saved
     const saved = JSON.parse(localStorage.getItem("savedRegistrations")) || [];
-    saved.forEach(({ registration, insuranceExpiry }) => {
+
+    // Build a list that starts with defaults, then any saved ones
+    // (but skip duplicates)
+    const initialList = [
+      ...defaultRegistrations.map((reg) => ({
+        registration: reg,
+        insuranceExpiry: "",
+      })),
+      ...saved.filter(
+        ({ registration }) =>
+          !defaultRegistrations.includes(registration)
+      ),
+    ];
+
+    initialList.forEach(({ registration, insuranceExpiry }) => {
       fetchVehicleData(registration, insuranceExpiry);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -46,7 +64,10 @@ function App() {
 
   const handleAdd = (registration) => {
     const reg = registration.trim().toUpperCase();
-    if (reg && !vehicles.some((v) => v.data.registration === reg)) {
+    if (
+      reg &&
+      !vehicles.some((v) => v.data.registration === reg)
+    ) {
       fetchVehicleData(reg);
     }
   };
