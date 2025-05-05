@@ -1,33 +1,36 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import VehicleForm from "./components/VehicleForm";
 import VehicleList from "./components/VehicleList";
+import DriverCheck from "./components/DriverCheck";
 
 function App() {
   const [vehicles, setVehicles] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState("vehicles");
 
-  // The three defaults to fetch every time
   const defaultRegistrations = ["DF04BEY", "D1PLO", "MK63XAR"];
 
+  // Keep track of which regs we've already fetched
+  const fetchedRegs = useRef(new Set());
+
   useEffect(() => {
-    // Load anything already saved
     const saved = JSON.parse(localStorage.getItem("savedRegistrations")) || [];
 
-    // Build a list that starts with defaults, then any saved ones
-    // (but skip duplicates)
     const initialList = [
-      ...defaultRegistrations.map((reg) => ({
-        registration: reg,
-        insuranceExpiry: "",
-      })),
-      ...saved.filter(
-        ({ registration }) =>
-          !defaultRegistrations.includes(registration)
-      ),
+      ...defaultRegistrations.map((reg) => ({ registration: reg, insuranceExpiry: "" })),
+      ...saved.filter(({ registration }) => !defaultRegistrations.includes(registration)),
     ];
 
-    initialList.forEach(({ registration, insuranceExpiry }) => {
+    // Deduplicate by registration just in case
+    const uniqueList = initialList.reduce((acc, cur) => {
+      if (!acc.find((item) => item.registration === cur.registration)) {
+        acc.push(cur);
+      }
+      return acc;
+    }, []);
+
+    uniqueList.forEach(({ registration, insuranceExpiry }) => {
       fetchVehicleData(registration, insuranceExpiry);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -42,6 +45,10 @@ function App() {
   }, [vehicles]);
 
   const fetchVehicleData = async (registration, insuranceExpiry = "") => {
+    // **Skip** if we already fetched this one
+    if (fetchedRegs.current.has(registration)) return;
+    fetchedRegs.current.add(registration);
+
     try {
       setLoading(true);
       const response = await fetch(`/api/vehicle/${registration}`);
@@ -64,10 +71,7 @@ function App() {
 
   const handleAdd = (registration) => {
     const reg = registration.trim().toUpperCase();
-    if (
-      reg &&
-      !vehicles.some((v) => v.data.registration === reg)
-    ) {
+    if (reg && !fetchedRegs.current.has(reg)) {
       fetchVehicleData(reg);
     }
   };
@@ -101,19 +105,49 @@ function App() {
   return (
     <div className="p-6 font-sans max-w-3xl mx-auto">
       <h1 className="text-3xl font-bold mb-4">Fleet Management</h1>
-      <VehicleForm onAdd={handleAdd} />
-      {error && <p className="text-red-500 mb-4">{error}</p>}
-      {loading && (
-        <div className="flex justify-center mb-4">
-          <div className="w-6 h-6 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-        </div>
+
+      <nav className="flex border-b mb-4">
+        <button
+          onClick={() => setTab("vehicles")}
+          className={`px-4 py-2 -mb-px font-medium ${
+            tab === "vehicles"
+              ? "border-b-2 border-blue-500 text-blue-600"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          Vehicles
+        </button>
+        <button
+          onClick={() => setTab("drivers")}
+          className={`ml-4 px-4 py-2 -mb-px font-medium ${
+            tab === "drivers"
+              ? "border-b-2 border-blue-500 text-blue-600"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          Drivers
+        </button>
+      </nav>
+
+      {tab === "vehicles" ? (
+        <>
+          <VehicleForm onAdd={handleAdd} />
+          {error && <p className="text-red-500 mb-4">{error}</p>}
+          {loading && (
+            <div className="flex justify-center mb-4">
+              <div className="w-6 h-6 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
+          <VehicleList
+            vehicles={vehicles}
+            onToggle={handleToggleExpand}
+            onRemove={handleRemove}
+            onEditInsurance={handleEditInsurance}
+          />
+        </>
+      ) : (
+        <DriverCheck />
       )}
-      <VehicleList
-        vehicles={vehicles}
-        onToggle={handleToggleExpand}
-        onRemove={handleRemove}
-        onEditInsurance={handleEditInsurance}
-      />
     </div>
   );
 }
